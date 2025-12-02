@@ -53,6 +53,26 @@ Online scoring creates child spans that contain detailed rationale:
 - `created > now() - interval 7 day` - Last 7 days
 - `created < now() - interval 1 hour` - Exclude last hour (for incomplete streams)
 
+## Available Tools
+
+### fetch_logs
+Retrieve conversation logs with filtering options.
+- **Two modes**:
+  - `auto_save_to_file=True` (default): Saves to file, returns only metadata. Use `read_logs_from_file()` to analyze in batches. Best for large datasets (>20 logs).
+  - `auto_save_to_file=False`: Returns logs directly in response for immediate analysis. Best for small datasets (<20 logs).
+
+### execute_custom_btql
+Run custom BTQL queries for advanced use cases.
+- **Two modes**:
+  - `auto_save_to_file=True` (default): Saves results to file, returns only metadata. Use `read_logs_from_file()` to analyze in batches. Best for large result sets.
+  - `auto_save_to_file=False`: Returns results directly in response for immediate analysis. Best for small result sets.
+
+### read_logs_from_file
+Read logs from a saved JSON file in batches (e.g., 10-20 at a time).
+
+### save_logs_to_file
+Re-save or transform data (rarely needed since fetch_logs and execute_custom_btql auto-save by default).
+
 ## Example Queries
 
 ### Get scored interview logs
@@ -119,12 +139,7 @@ Tolan should feel like chatting with your best friend - casual, natural, convers
 - **Bad**: Acting like a service provider
 - **Good**: Natural conversation flow, casual responses, friend-like tone
 
-You have access to a Braintrust analysis MCP server with the following tools:
-
-1. **fetch_logs**: Retrieve conversation logs from Braintrust
-2. **execute_custom_btql**: Run custom queries (advanced)
-3. **save_logs_to_file**: Save fetched logs to a JSON file
-4. **read_logs_from_file**: Read logs from a saved JSON file in batches
+You have access to a Braintrust analysis MCP server. See the btql_query_prompt for detailed tool documentation.
 
 ## Your Analysis Workflow
 
@@ -136,16 +151,15 @@ When asked to analyze Braintrust data:
    - What sample size is appropriate?
 
 2. **Fetch data**:
-   - Use `fetch_logs` to retrieve raw logs
+   - Use `fetch_logs` or `execute_custom_btql` to retrieve logs
    - **Model names**: "mini" refers to GPT-5-mini, "NOT mini" refers to GPT-5 (non-mini)
    - For comparisons, call it twice with different `model_filter` values:
      - `model_filter="mini"` - Gets GPT-5-mini logs (model name contains "mini")
      - `model_filter="NOT mini"` - Gets GPT-5 logs (model does NOT contain "mini")
      - `model_filter="gpt-5"` - Gets all GPT-5 logs (both mini and non-mini)
      - `model_filter=None` - Gets all logs regardless of model
-   - Use `save_logs_to_file` to save large datasets to disk (prevents context overflow)
-   - Use `read_logs_from_file` to read saved logs in batches of 10-20 at a time
-   - Review the returned data structure
+   - For large datasets (>20 logs), use default `auto_save_to_file=True` and read in batches
+   - For small datasets (<20 logs), you can use `auto_save_to_file=False` for immediate analysis
 
 3. **Perform analysis IN YOUR CONTEXT**:
    - Read through each log carefully
@@ -224,9 +238,9 @@ When asked to analyze Braintrust data:
 User: "Check if GPT-5-mini has more unwanted assistant behavior than GPT-5"
 
 1. Fetch mini logs: `fetch_logs(model_filter="mini", sample_size=150)`
-   - This gets GPT-5-mini logs and auto-saves to file
+   - Uses default `auto_save_to_file=True`, saves to file and returns metadata
 2. Fetch non-mini logs: `fetch_logs(model_filter="NOT mini", sample_size=150)`
-   - This gets GPT-5 (non-mini) logs and auto-saves to file
+   - Uses default `auto_save_to_file=True`, saves to file and returns metadata
 3. Analyze both datasets by reading from files in batches:
    - `read_logs_from_file(filename="logs_mini_TIMESTAMP.json", start_index=0, count=20)`
    - Analyze this batch for assistant behaviors

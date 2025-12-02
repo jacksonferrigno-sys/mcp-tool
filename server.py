@@ -224,11 +224,11 @@ def save_logs_to_file(
     """
     Save fetched logs to a JSON file to prevent context window overflow.
     
-    This allows you to save large datasets to disk, then analyze them by reading
-    the file incrementally instead of keeping everything in context.
+    NOTE: fetch_logs() and execute_custom_btql() now auto-save by default, so this tool
+    is mainly useful for re-saving or transforming already-loaded data.
     
     Args:
-        logs_data: The complete result from fetch_logs() 
+        logs_data: The complete result from fetch_logs() or other data to save
         filename: Name for the output file (auto-generated if None)
         
     Returns:
@@ -352,21 +352,32 @@ def read_logs_from_file(
 @mcp.tool()
 def execute_custom_btql(
     query: str,
-    limit: int = 100
+    limit: int = 100,
+    auto_save_to_file: bool = True,
+    filename: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Execute a custom BTQL query for advanced use cases (project 'Chat': ec6cb39d-161d-4669-953f-444fd5c386f6).
     
+    IMPORTANT: By default, results are automatically saved to a file to prevent context overflow.
+    The response only contains metadata, not the actual records. Use read_logs_from_file() to analyze.
+    
     Args:
         query: Full BTQL query string (will be modified to use project 'chat')
         limit: Maximum records to return
+        auto_save_to_file: If True, saves to file and returns only metadata (default: True)
+        filename: Custom filename for saved results (auto-generated if None)
         
     Returns:
         Dictionary containing:
+        - file_path: Where results were saved (if auto_save_to_file=True)
         - query_executed: The actual query executed
-        - records: Query results
         - record_count: Number of records returned
     """
+    import json
+    from pathlib import Path
+    from datetime import datetime
+    
     try:
         # Ensure query uses the correct project ID
         if "FROM:" in query or "from:" in query.lower():
@@ -384,17 +395,55 @@ def execute_custom_btql(
         response = execute_btql_query(modified_query)
         records = response.get("data", [])
         
-        return {
-            "query_executed": modified_query.strip(),
-            "records": records,
-            "record_count": len(records)
-        }
+        # If auto-save is enabled, save to file and return minimal response
+        if auto_save_to_file:
+            # Generate filename if not provided
+            if filename is None:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"btql_results_{timestamp}.json"
+            
+            # Ensure .json extension
+            if not filename.endswith(".json"):
+                filename += ".json"
+            
+            # Create full data structure
+            full_data = {
+                "query_executed": modified_query.strip(),
+                "record_count": len(records),
+                "records": records
+            }
+            
+            # Save to file
+            filepath = Path(filename)
+            with open(filepath, "w") as f:
+                json.dump(full_data, f, indent=2)
+            
+            file_size = filepath.stat().st_size
+            
+            # Return minimal response with file info
+            return {
+                "status": "success",
+                "file_path": str(filepath.absolute()),
+                "filename": filename,
+                "query_executed": modified_query.strip(),
+                "record_count": len(records),
+                "file_size_bytes": file_size,
+                "message": f"Saved {len(records)} records to {filename}. Use read_logs_from_file('{filename}') to analyze."
+            }
+        
+        # If auto-save disabled, return full data (NOT RECOMMENDED for large result sets)
+        else:
+            return {
+                "query_executed": modified_query.strip(),
+                "records": records,
+                "record_count": len(records)
+            }
     
     except Exception as e:
         return {
             "error": str(e),
-            "query_executed": query.strip(),
-            "records": [],
+            "query_executed": query.strip() if 'modified_query' not in locals() else modified_query.strip(),
+            "records": [] if not auto_save_to_file else None,
             "record_count": 0
         }
 
